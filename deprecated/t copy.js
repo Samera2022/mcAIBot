@@ -7,19 +7,17 @@ const Movements = require('mineflayer-pathfinder').Movements
 const { GoalNear } = require('mineflayer-pathfinder').goals
 const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const pvp = require('mineflayer-pvp').plugin
+const armorManager = require("mineflayer-armor-manager");
 import { loader as autoEat } from 'mineflayer-auto-eat'
 
-const EventEmitter = require('events');
-const emitter = new EventEmitter();
-emitter.setMaxListeners(50);//just for test
 
 const { StateTransition, BotStateMachine, EntityFilters, BehaviorFollowEntity, BehaviorLookAtEntity, BehaviorGetClosestEntity,
   NestedStateMachine } = require("mineflayer-statemachine");
 
-import behaviorOnWork from './behaviorOnWork.js';
-import { str_OW_FISHING, str_OW_COLLECTING_BLOCKS, str_OW_GUARDING, str_OW_PVP, str_OW_COMPETE, str_OW_STOP_ALL_ACTIVITIES } from './constant.js';
-import { str_R_FOLLOW, str_R_FOLLOW_ENDED, str_R_PVP, str_R_GUARD, str_R_COMPETE } from './constant.js';
-import { stopGuarding, evt_stoppedAttacking, evt_physicsTick } from './guard.js';
+import behaviorOnWork from '../behaviorOnWork.js';
+import { str_OW_FISHING, str_OW_COLLECTING_BLOCKS, str_OW_GUARDING, str_OW_PVP, str_OW_STOP_ALL_ACTIVITIES } from '../constant.js';
+import { str_R_FOLLOW, str_R_FOLLOW_ENDED, str_R_PVP, str_R_GUARD } from '../constant.js';
+import { stopGuarding, evt_stoppedAttacking, evt_physicsTick } from '../guard.js';
 
 console.log('running...');
 
@@ -34,6 +32,9 @@ export const bot = mineflayer.createBot({
 
 bot.loadPlugin(pvp)
 bot.loadPlugin(pathfinder)
+bot.loadPlugin(armorManager);
+bot.loadPlugin(autoEat)
+
 
 bot.once('spawn', () => { mineflayerViewer(bot, { port: 3007, firstPerson: true }) /* port 是本地网页运行的端口 ，如果 firstPerson: false，那么将会显示鸟瞰图。*/ })
 
@@ -43,14 +44,10 @@ bot.on('error', console.log)
 
 var bool_follow = false;/*用来判断是否处在跟随玩家的状态*/
 var bool_onWork = false;/*用来判断是否处在工作的状态*/
-
-var bool_compete = false;
-
-var int_compete = 0;
-var int_bot_death = 0;
-var int_player_death = 0;
-
+var infos = {};//全局变量
+var extra_infos = {};//用于respawn事件
 bot.once('spawn', () => {
+  bot.armorManager.equipAll();
 
   const targets = {};
   const getClosestPlayer = new BehaviorGetClosestEntity(bot, targets, EntityFilters().PlayersOnly);
@@ -97,33 +94,30 @@ bot.once('spawn', () => {
   ];
   const rootLayer = new NestedStateMachine(transitions, getClosestPlayer);
   new BotStateMachine(bot, rootLayer);
-  var infos = {};//全局变量
-  bot.on('chat', async (username, message) => {
-    if (username === bot.username) return;
-    var entity_target = bot.players[username] ? bot.players[username].entity : null
-    infos.sender = username;//发送者已确定
-    var bool_currentOnWork = bool_onWork;//判断事件发生时是否处于onWork状态
-    const defaultMove = new Movements(bot)
 
-    //R(Request)表示请求，变量判断请求类型时使用
-    //OW(onWork)表示工作种类，在判断出请求类型之后传递参数时使用。二者大抵是可以合并掉一大部分的，但是之后再说吧。
-    //目前bot还无法做到一心多用（（（一次只能干一件事
-    //WARN: 如果之后做到了一心多用的话，那么这里的switch case判断逻辑就要换成一条一条if来判断了
+  //为什么这里要单独做一个函数呢？因为下面的respawn之后还要用到这玩意
+  //R(Request)表示请求，变量判断请求类型时使用
+  //OW(onWork)表示工作种类，在判断出请求类型之后传递参数时使用。二者大抵是可以合并掉一大部分的，但是之后再说吧。
+  //目前bot还无法做到一心多用（（（一次只能干一件事
+  //WARN: 如果之后做到了一心多用的话，那么这里的switch case判断逻辑就要换成一条一条if来判断了
+  function handleWorks(entity_target, message, bool_dead) {
+    var bool_currentOnWork = bool_onWork;//判断事件发生时是否处于onWork状态
+    console.log('Handler Work');
     switch (message) {
       case str_R_FOLLOW:
-        if (!validateHorizon(entity_target)) return;
+        // if (!validateHorizon(entity_target)) return;
         transitions[2].trigger();
         transitions[5].trigger();
         bool_follow = true;
         break;
       case str_R_FOLLOW_ENDED:
-        transitions[1].trigger()
+        transitions[1].trigger();
         bool_follow = false;
         break;
 
       //接下来的case都涉及工作状态的转变  
       case str_R_PVP:
-        if (!validateHorizon(entity_target)) return;
+        // if (!validateHorizon(entity_target)) return;
         bot.chat('Let\'s see who is the boss of the Gym♂!')
         infos.workType = str_OW_PVP
         bool_onWork = true;
@@ -134,61 +128,60 @@ bot.once('spawn', () => {
         infos.workType = str_OW_GUARDING
         bool_onWork = true;
         break;
-      case str_R_COMPETE:
-        if (!validateHorizon(entity_target)) return;
-          transitions[3].trigger();d
-          transitions[4].trigger();
-          const p = entity_target.position
-          bot.pathfinder.setMovements(defaultMove)
-          await bot.pathfinder.goto(new goals.GoalNear(guardPos.x, guardPos.y, guardPos.z, 1))
-        if (!bool_compete) await compete();
-        else bot.chat('等等，我话还没说完呢......');
-        break;
     }
-
     //转为工作状态onWork，同时传递参数
-    if (bool_onWork) {
-      if (!bool_currentOnWork) {
+    if (bool_onWork) { 
+      if ((!bool_currentOnWork)) {
         transitions[3].trigger();
         transitions[4].trigger();
       }
       onWork.addInfo(infos);
     }
+  }
 
-    //如果发送了停止消息那么就开始判断要停止什么。目前bot还无法做到一心多用（（（一次只能干一件事
-    //如果玩家发送了stop，且onWork有具体的任务，且已经进入了onWork状态（或许可以忽略三者中后面二者中的其中一条判断？）
-    //WARN: 如果之后做到了一心多用的话，那么这里的switch case判断逻辑就要换成一条一条if来判断了
-    console.log('[CHECK]: ' + '\nonWork.targets.workType: ' + onWork.targets.workType + '\nbool_onWork: ' + bool_onWork);
-    //onWork.targets.workType只能获取当前chat事件下的workType，无法通过onWork.targets.workType来获取bot所处的工作类型
-    //后记：onWork的targets无法获取，，，我不知道为什么在当前chat事件里是可以获取的，在下一个chat事件就获取不了了
-    if (message === 'stop' && infos.workType !== undefined && (bool_onWork)) {
-      switch (infos.workType) {
-        case str_OW_PVP:
-          bot.pvp.stop();
-          break;
-        case str_OW_GUARDING:
-          bot.chat('I will no longer guard this area.')
-          stopGuarding();
-          break;
-        default:
-          console.log('[ERROR] WorkType Unknown!');
-          break;
-      }
-      infos.workType = undefined;
-      bool_onWork = false;//工作已停止
-      transitions[5].trigger();//状态由工作转换为原地看着
+  //如果发送了停止消息那么就开始判断要停止什么。目前bot还无法做到一心多用（（（一次只能干一件事
+  //如果玩家发送了stop，且onWork有具体的任务，且已经进入了onWork状态（或许可以忽略三者中后面二者中的其中一条判断？）
+  //WARN: 如果之后做到了一心多用的话，那么这里的switch case判断逻辑就要换成一条一条if来判断了
+  // console.log('[CHECK]: ' + '\nonWork.targets.workType: ' + onWork.targets.workType + '\nbool_onWork: ' + bool_onWork);
+  //onWork.targets.workType只能获取当前chat事件下的workType，无法通过onWork.targets.workType来获取bot所处的工作类型
+  //后记：onWork的targets无法获取，，，我不知道为什么在当前chat事件里是可以获取的，在下一个chat事件就获取不了了
+  function handleStops(bool_dead) {
+    console.log('Handle Stop!');
+    switch (infos.workType) {
+      case str_OW_PVP:
+        bot.pvp.stop();
+        break;
+      case str_OW_GUARDING:
+        bot.chat('I will no longer guard this area.')
+        stopGuarding();
+        break;
+      default:
+        console.log('[ERROR] WorkType Unknown!');
+        break;
     }
-  })
-  bot.on('physicsTicks', ()=>{
+    if (!bool_dead){
+    infos.workType = undefined;
+    bool_onWork = false;//工作已停止
+    transitions[5].trigger();//状态由工作转换为原地看着
+  }
+}
+  bot.on('chat', (username, message) => {
+    if (username === bot.username) return;
+    var entity_target = bot.players[username] ? bot.players[username].entity : null
+    infos.sender = username;//发送者已确定
+
+    extra_infos = infos;
+    extra_infos.player = entity_target;
+
+    handleWorks(entity_target, message, false);
+    infos.raw = message;
+
+    if (message === 'stop' && infos.workType !== undefined && (bool_onWork)) handleStops(false);
 
   });
-  bot.on('spawn', () => {
-    if (bool_onWork && infos.workType !== undefined) {
-      transitions[5].trigger();
-      transitions[3].trigger();
-    };
-  });
 
+  bot.on('respawn', () => { if (bool_onWork && infos.workType !== undefined) handleWorks(extra_infos.player, infos.raw, true); });
+  bot.on('death', () => { if (bool_onWork && infos.workType !== undefined) handleStops(true); });
   bot.on('entityHurt', (entity) => {
     if (entity.type === 'player') {
       if (infos.workType !== str_OW_PVP) {
@@ -200,6 +193,7 @@ bot.once('spawn', () => {
       }
     }
   })
+
 })
 
 function validateHorizon(entity_target) {
@@ -209,8 +203,12 @@ function validateHorizon(entity_target) {
   } else return true
 }
 
+
+
+//guard Action
 bot.on('physicsTick', evt_physicsTick);
 bot.on('stopAttacking', evt_stoppedAttacking);
+
 
 //set model
 bot.once('spawn', () => {
@@ -227,38 +225,16 @@ bot.on('entityDead', (entity) => {
   }
 })
 
-const armorManager = require("mineflayer-armor-manager");
-bot.loadPlugin(armorManager);
-bot.once("spawn", () => bot.armorManager.equipAll());
 
 
-bot.once('spawn', async () => {
-  bot.loadPlugin(autoEat)
-  bot.autoEat.enableAuto()
-  bot.autoEat.on('eatStart', (opts) => { console.log(`Started eating ${opts.food.name} in ${opts.offhand ? 'offhand' : 'hand'}`) })
-  bot.autoEat.on('eatFinish', (opts) => { console.log(`Finished eating ${opts.food.name}`) })
-  bot.autoEat.on('eatFail', (error) => { console.error('Eating failed:', error) })
-})
+// //把loader作为autoEat来导入
+// bot.once('spawn', async () => {
+//   bot.autoEat.enableAuto()
+//   bot.autoEat.on('eatStart', (opts) => { console.log(`Started eating ${opts.food.name} in ${opts.offhand ? 'offhand' : 'hand'}`) })
+//   bot.autoEat.on('eatFinish', (opts) => { console.log(`Finished eating ${opts.food.name}`) })
+//   bot.autoEat.on('eatFail', (error) => { console.error('Eating failed:', error) })
+// })
 
-function sleep(ms) { return new Promise(val => setTimeout(val, ms)); }
-async function compete() {
-  bool_compete = true;
-  await speaker('你是说想和我来一场切磋吗？');
-  await speaker('太好了！我已经很久没有找人切磋过了！');
-  await speaker('那么我先来说明一下规则！');
-  await speaker('以你的视角来看，屏幕右边应该会出现一些Object对象,,,,,,');
-  await speaker('噢！不好意思');
-  await speaker('我忘记你不能直接看Object对象了！等我一会......');
-  await speaker('大功告成！现在你应该就可以看得懂了！');
-  await speaker('右边列出了我的失败次数和你的失败次数');
-  await speaker('我们以三局为界，谁先胜出对方三局就获胜！');
-  await speaker('怎么样，有意思吧！');
-  await speaker('我们先来试试吧！');
-}
-async function speaker(str) {
-  bot.chat(str)
-  await sleep(250*(str.length));
-}
 // bot.on('chat', async (username, message) => {
 //   if (username === bot.username) return;
 //   if (message === 'Dig downwards') {

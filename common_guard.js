@@ -2,6 +2,8 @@ let guardPos = null
 let movingToGuardPos = false
 import { bot } from './t.js';
 
+//will be edited to guard around player and the bot itself.
+
 // Assign the given location to be guarded
 export function guardArea(pos) {
   guardPos = pos
@@ -62,4 +64,3 @@ export async function evt_physicsTick(){
     moveToGuardPos()
   }
 }
-

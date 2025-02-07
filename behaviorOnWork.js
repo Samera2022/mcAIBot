@@ -37,9 +37,6 @@ class behaviorOnWork {
         //相当于while true
     }
 
-    currentWorkType(){return this.targets.workType}
-    setWorkType(_workType){this.targets.workType = _workType}
-
     addInfo(infos) {
         // this.infos = infos;
         if (this.targets.sender === undefined || this.targets.sender !== infos.sender) this.targets.sender = infos.sender;
