@@ -1,10 +1,17 @@
+//写在前面
+//不要对机器人整很多逆天操作，这个机器人的逻辑判断很脆弱的（（（
+//也不要试图多人同时使用一个机器人，也会出bug的
+//@author: Samera2022
+//@date: 2025.02.07 17:24
+//@ts-check
+
+
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const mineflayer = require('mineflayer')
 const { goals } = require('mineflayer-pathfinder')
 const pathfinder = require('mineflayer-pathfinder').pathfinder
 const Movements = require('mineflayer-pathfinder').Movements
-const { GoalNear } = require('mineflayer-pathfinder').goals
 const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const pvp = require('mineflayer-pvp').plugin
 import { loader as autoEat } from 'mineflayer-auto-eat'
@@ -44,11 +51,15 @@ bot.on('error', console.log)
 var bool_follow = false;/*用来判断是否处在跟随玩家的状态*/
 var bool_onWork = false;/*用来判断是否处在工作的状态*/
 
-var bool_compete = false;
 
-var int_compete = 0;
-var int_bot_death = 0;
-var int_player_death = 0;
+var object_compete = {
+  int_compete: 0,
+  int_bot_death: 0,
+  int_player_death: 0,
+  str_player: '',
+  bool_win: false, /*bot是否胜利*/
+  bool_compete: false
+}
 
 bot.once('spawn', () => {
 
@@ -58,37 +69,37 @@ bot.once('spawn', () => {
   const lookAtPlayer = new BehaviorLookAtEntity(bot, targets);
   const onWork = new behaviorOnWork(bot, targets);
   const transitions = [
-    //找玩家
+    //找玩家0
     new StateTransition({
       parent: getClosestPlayer,
       child: followPlayer,
       shouldTransition: () => true,
     }),
-    //从跟转到看
+    //从跟转到看1
     new StateTransition({
       parent: followPlayer,
       child: lookAtPlayer,
       shouldTransition: () => followPlayer.distanceToTarget() < 2,
     }),
-    //从看转到跟
+    //从看转到跟2
     new StateTransition({
       parent: lookAtPlayer,
       child: followPlayer,
       shouldTransition: () => lookAtPlayer.distanceToTarget() >= 2 && bool_follow,
     }),
-    //从看转为工作
+    //从看转为工作3
     new StateTransition({
       parent: lookAtPlayer,
       child: onWork,
       shouldTransition: () => bool_onWork,
     }),
-    //从跟转为工作
+    //从跟转为工作4
     new StateTransition({
       parent: followPlayer,
       child: onWork,
       shouldTransition: () => bool_onWork,
     }),
-    //从工作转为看
+    //从工作转为看5
     new StateTransition({
       parent: onWork,
       child: lookAtPlayer,
@@ -112,47 +123,73 @@ bot.once('spawn', () => {
     switch (message) {
       case str_R_FOLLOW:
         if (!validateHorizon(entity_target)) return;
-        transitions[2].trigger();
         transitions[5].trigger();
+        transitions[2].trigger();
         bool_follow = true;
         break;
       case str_R_FOLLOW_ENDED:
         transitions[1].trigger()
         bool_follow = false;
         break;
-
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN      此处状态机的切换仍然有问题，多加注意！
+      //WARN      应该先切换状态再进行寻路之类的操作的
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
+      //WARN
       //接下来的case都涉及工作状态的转变  
       case str_R_PVP:
         if (!validateHorizon(entity_target)) return;
+        bool_onWork = true;
+        trigger(true)
         bot.chat('Let\'s see who is the boss of the Gym♂!')
         infos.workType = str_OW_PVP
-        bool_onWork = true;
         break;
       case str_R_GUARD:
         if (!validateHorizon(entity_target)) return;
+        bool_onWork = true;
+        trigger(true);
         bot.chat('I will guard that location.')
         infos.workType = str_OW_GUARDING
-        bool_onWork = true;
         break;
+
+
       case str_R_COMPETE:
         if (!validateHorizon(entity_target)) return;
-          transitions[3].trigger();d
-          transitions[4].trigger();
-          const p = entity_target.position
-          bot.pathfinder.setMovements(defaultMove)
-          await bot.pathfinder.goto(new goals.GoalNear(guardPos.x, guardPos.y, guardPos.z, 1))
-        if (!bool_compete) await compete();
+        bool_onWork = true;
+        trigger(false);
+        bool_onWork = false;
+        // const p = entity_target.position
+        // bot.pathfinder.setMovements(defaultMove)
+        // await bot.pathfinder.goto(new goals.GoalNear(p.x, p.y, p.z, 1))
+        object_compete.str_player = username;
+        if (!object_compete.bool_compete) await compete();
         else bot.chat('等等，我话还没说完呢......');
         break;
+
     }
 
     //转为工作状态onWork，同时传递参数
-    if (bool_onWork) {
-      if (!bool_currentOnWork) {
-        transitions[3].trigger();
-        transitions[4].trigger();
+    function trigger(bool_addInfo) {
+      if (bool_onWork) {
+        if (!bool_currentOnWork) {
+          transitions[0].trigger();
+          transitions[3].trigger();
+          transitions[4].trigger();
+        }
+        if (bool_addInfo) onWork.addInfo(infos);
       }
-      onWork.addInfo(infos);
     }
 
     //如果发送了停止消息那么就开始判断要停止什么。目前bot还无法做到一心多用（（（一次只能干一件事
@@ -165,6 +202,7 @@ bot.once('spawn', () => {
       switch (infos.workType) {
         case str_OW_PVP:
           bot.pvp.stop();
+          bot.pathfinder.setGoal(null)
           break;
         case str_OW_GUARDING:
           bot.chat('I will no longer guard this area.')
@@ -179,19 +217,36 @@ bot.once('spawn', () => {
       transitions[5].trigger();//状态由工作转换为原地看着
     }
   })
-  bot.on('physicsTicks', ()=>{
-
-  });
+  //WARN: bot如果之前是follow状态，死亡重生之后就会回到刚刚的地点，但我不清楚这是为什么
   bot.on('spawn', () => {
     if (bool_onWork && infos.workType !== undefined) {
-      transitions[5].trigger();
       transitions[3].trigger();
+      transitions[4].trigger();
     };
+    if (object_compete.bool_compete) {
+      object_compete.bool_win = false;
+      object_compete.int_bot_death += 1;
+      compete();
+    }
+    if (bool_follow) {
+      transitions[2].trigger();
+    }
   });
+
+  bot.on('entityDead', (entity) => {
+    if (entity.type === 'player') {
+      if (entity.username === bot.username) return;
+      if (object_compete.bool_compete && object_compete.str_player === entity.username) {
+        object_compete.bool_win = true;
+        object_compete.int_player_death += 1;
+        compete();
+      }
+    }
+  })
 
   bot.on('entityHurt', (entity) => {
     if (entity.type === 'player') {
-      if (infos.workType !== str_OW_PVP) {
+      if (infos.workType !== str_OW_PVP && (!object_compete.bool_compete)) {
         if (entity.username === bot.username) {
           bot.chat('I\'m hurt!');
         } else {
@@ -210,22 +265,8 @@ function validateHorizon(entity_target) {
 }
 
 bot.on('physicsTick', evt_physicsTick);
-bot.on('stopAttacking', evt_stoppedAttacking);
-
-//set model
-bot.once('spawn', () => {
-  bot.chat('/ysm model set CappieTest mita_miside texture true');
-})
-
-
-
-bot.on('entityDead', (entity) => {
-  if (entity.type === 'player') {
-    if (entity.username !== bot.username) {
-      bot.chat('Oh, dear!');
-    }
-  }
-})
+// bot.on('stoppedAttacking', evt_stoppedAttacking);
+bot.on('entityDead', evt_stoppedAttacking);
 
 const armorManager = require("mineflayer-armor-manager");
 bot.loadPlugin(armorManager);
@@ -241,23 +282,86 @@ bot.once('spawn', async () => {
 })
 
 function sleep(ms) { return new Promise(val => setTimeout(val, ms)); }
+
 async function compete() {
-  bool_compete = true;
-  await speaker('你是说想和我来一场切磋吗？');
-  await speaker('太好了！我已经很久没有找人切磋过了！');
-  await speaker('那么我先来说明一下规则！');
-  await speaker('以你的视角来看，屏幕右边应该会出现一些Object对象,,,,,,');
-  await speaker('噢！不好意思');
-  await speaker('我忘记你不能直接看Object对象了！等我一会......');
-  await speaker('大功告成！现在你应该就可以看得懂了！');
-  await speaker('右边列出了我的失败次数和你的失败次数');
-  await speaker('我们以三局为界，谁先胜出对方三局就获胜！');
-  await speaker('怎么样，有意思吧！');
-  await speaker('我们先来试试吧！');
+  object_compete.bool_compete = true;
+  var str_object = '';
+  if (object_compete.int_player_death === 0 && object_compete.int_bot_death === 0) str_object = '0v0';
+  else if (object_compete.bool_win) {
+    str_object += 'v' + object_compete.int_player_death;
+  } else {
+    str_object += object_compete.int_bot_death + 'v';
+  }
+  await handle_compete(str_object);
+  bot.pvp.stop();
+  bot.pathfinder.setGoal(null);
+  if (object_compete.int_player_death === 3 || object_compete.int_bot_death === 3) {
+    object_compete = {
+      int_compete: 0,
+      int_bot_death: 0,
+      int_player_death: 0,
+      str_player: '',
+      bool_win: false,
+      bool_compete: false
+    };
+    bot.chat('怎么样，还想再来一轮吗？');
+    return;
+  }
+  await speaker('等你一会来拉开距离，对决马上开始......');
+  var entity_target = bot.players[object_compete.str_player] ? bot.players[object_compete.str_player].entity : null;
+  //@ts-ignore
+  if (validateHorizon(entity_target)) bot.pvp.attack(entity_target);
+}
+
+//没有增加玩家对话的原因是因为我不知道怎么整（（（而且从逻辑上来说好像机器人是没办法做出这种效果的（
+async function handle_compete(object) {
+  var objectMap = {
+    //player v bot
+    '0v0': async function () {
+      await speaker('你是说想和我来一场切磋吗？');
+      await speaker('太好了！我已经很久没有找人切磋过了！');
+      await speaker('那么我先来说明一下规则！');
+      await speaker('以你的视角来看，屏幕右边应该会出现一些Object对象,,,,,,');
+      await speaker('噢！不好意思');
+      await speaker('我忘记你不能直接看Object对象了！等我一会......');
+      await speaker('大功告成！现在你应该就可以看得懂了！');
+      await speaker('右边列出了我的失败次数和你的失败次数');
+      await speaker('我们以三局为界，三局两胜！');
+      await speaker('怎么样，有意思吧！');
+      await speaker('我们先来试试吧！');
+    },
+    'v1': async function () {
+      await speaker('还行吗？还行的话就继续吧！');
+    },
+    'v2': async function () {
+      await speaker('看我的！');
+      await speaker('知道我的厉害了吧！');
+    },
+    'v3': async function () {
+      await speaker('哈哈！');
+      await speaker('我真棒！');
+      await speaker('我真可爱！');
+    },
+    '1v': async function () {
+      await speaker('你啊！');
+      await speaker('OK，');
+      await speaker('我会狠狠报仇的！');
+    },
+    '2v': async function () {
+      await speaker('怎么又输了？');
+      await speaker('我没事，咱们继续吧！');
+      await speaker('你赢了。');
+    },
+    '3v': async function () {
+      await speaker('这么厉害的吗......');
+      await speaker('现在你是我最尊敬的对手了！');
+    }
+  }
+  return objectMap[object]();
 }
 async function speaker(str) {
   bot.chat(str)
-  await sleep(250*(str.length));
+  await sleep(250 * (str.length));
 }
 // bot.on('chat', async (username, message) => {
 //   if (username === bot.username) return;

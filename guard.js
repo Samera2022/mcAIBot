@@ -1,3 +1,8 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { goals } = require('mineflayer-pathfinder')
+const Movements = require('mineflayer-pathfinder').Movements
+
 let guardPos = null
 let movingToGuardPos = false
 import { bot } from './t.js';
