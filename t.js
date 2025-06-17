@@ -23,18 +23,21 @@ emitter.setMaxListeners(50);//just for test
 const { StateTransition, BotStateMachine, EntityFilters, BehaviorFollowEntity, BehaviorLookAtEntity, BehaviorGetClosestEntity,
   NestedStateMachine } = require("mineflayer-statemachine");
 
-import behaviorOnWork from './behaviorOnWork.js';
 import { str_OW_FISHING, str_OW_COLLECTING_BLOCKS, str_OW_GUARDING, str_OW_PVP, str_OW_COMPETE, str_OW_STOP_ALL_ACTIVITIES } from './constant.js';
 import { str_R_FOLLOW, str_R_FOLLOW_ENDED, str_R_PVP, str_R_GUARD, str_R_COMPETE } from './constant.js';
 import { stopGuarding, evt_stoppedAttacking, evt_physicsTick } from './guard.js';
 
+import BehaviorOnWork from './behaviors/behaviorOnWork.js';
+// import BehaviorCleverFollowPlayer from './behaviors/behaviorCleverFollowPlayer.js';
+// import BehaviorTest from './behaviors/behavior.js';
+
 console.log('running...');
 
 export const bot = mineflayer.createBot({
-  host: 'play.simpfun.cn', // minecraft 服务器的 IP 地址
+  host: '127.0.0.1', // minecraft 服务器的 IP 地址
   username: 'CappieTest', // minecraft 用户名
   //password: '12345678' // minecraft 密码, 如果你玩的是不需要正版验证的服务器，请注释掉。
-  port: 13425,                // 默认使用 25565，如果你的服务器端口不是这个请取消注释并填写。
+  port: 25565,                // 默认使用 25565，如果你的服务器端口不是这个请取消注释并填写。
   // version: false,             // 如果需要指定使用一个版本或快照时，请取消注释并手动填写（如："1.8.9" 或 "1.16.5"），否则会自动设置。
   // auth: 'mojang'              // 如果需要使用微软账号登录时，请取消注释，然后将值设置为 'microsoft'，否则会自动设置为 'mojang'。
 })
@@ -63,11 +66,16 @@ var object_compete = {
 
 bot.once('spawn', () => {
 
+//如果一开始没有见到玩家，那么后面都会卡住
+
   const targets = {};
   const getClosestPlayer = new BehaviorGetClosestEntity(bot, targets, EntityFilters().PlayersOnly);
   const followPlayer = new BehaviorFollowEntity(bot, targets);
   const lookAtPlayer = new BehaviorLookAtEntity(bot, targets);
-  const onWork = new behaviorOnWork(bot, targets);
+  const onWork = new BehaviorOnWork(bot, targets);
+  // const cleverFollowPlayer = new BehaviorCleverFollowPlayer(bot, targets);
+  // const test = new BehaviorTest(bot, targets);
+  // 定义状态转移
   const transitions = [
     //找玩家0
     new StateTransition({
@@ -79,13 +87,13 @@ bot.once('spawn', () => {
     new StateTransition({
       parent: followPlayer,
       child: lookAtPlayer,
-      shouldTransition: () => followPlayer.distanceToTarget() < 2,
+      shouldTransition: () => (followPlayer.distanceToTarget() < 2 || (!bool_follow)) && (!bool_onWork),
     }),
     //从看转到跟2
     new StateTransition({
       parent: lookAtPlayer,
       child: followPlayer,
-      shouldTransition: () => lookAtPlayer.distanceToTarget() >= 2 && bool_follow,
+      shouldTransition: () => (lookAtPlayer.distanceToTarget() >= 2 && bool_follow) && (!bool_onWork),
     }),
     //从看转为工作3
     new StateTransition({
@@ -148,20 +156,23 @@ bot.once('spawn', () => {
       //WARN
       //WARN
       //WARN
+
+
+      //应该最先设置检测能否看到玩家，然后设置workType，再然后执行其他语句，之后改状态，最后执行trigger
       //接下来的case都涉及工作状态的转变  
       case str_R_PVP:
         if (!validateHorizon(entity_target)) return;
+        infos.workType = str_OW_PVP
+        bot.chat('Let\'s see who is the boss of the Gym♂!')
         bool_onWork = true;
         trigger(true)
-        bot.chat('Let\'s see who is the boss of the Gym♂!')
-        infos.workType = str_OW_PVP
         break;
       case str_R_GUARD:
         if (!validateHorizon(entity_target)) return;
+        infos.workType = str_OW_GUARDING
+        bot.chat('I will guard that location.')
         bool_onWork = true;
         trigger(true);
-        bot.chat('I will guard that location.')
-        infos.workType = str_OW_GUARDING
         break;
 
 
@@ -180,15 +191,18 @@ bot.once('spawn', () => {
 
     }
 
+    //不要问为啥已经明确是在工作状态下调用的trigger却仍然要声明bool_onWork，并且在这里还要再判断一次bool_onWork
+    //因为bot可能在工作状态下收到了stop消息，此时bot的工作状态已经被改变，但是bool_onWork还没有被改变
+    //所以如果此时bot收到了stop消息，那么bot就会认为自己正在工作，但是实际上已经停止了工作
     //转为工作状态onWork，同时传递参数
     function trigger(bool_addInfo) {
       if (bool_onWork) {
+        if (bool_addInfo) onWork.addInfo(infos);//这里可能会有问题，需要注意！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！这里可能会出现因为语句先后顺序而导致的问题。
         if (!bool_currentOnWork) {
           transitions[0].trigger();
           transitions[3].trigger();
           transitions[4].trigger();
         }
-        if (bool_addInfo) onWork.addInfo(infos);
       }
     }
 
@@ -201,6 +215,7 @@ bot.once('spawn', () => {
     if (message === 'stop' && infos.workType !== undefined && (bool_onWork)) {
       switch (infos.workType) {
         case str_OW_PVP:
+          bot.chat('Well, I will stop fighting.')
           bot.pvp.stop();
           bot.pathfinder.setGoal(null)
           break;
@@ -213,6 +228,7 @@ bot.once('spawn', () => {
           break;
       }
       infos.workType = undefined;
+      onWork.reset();
       bool_onWork = false;//工作已停止
       transitions[5].trigger();//状态由工作转换为原地看着
     }
@@ -363,12 +379,179 @@ async function speaker(str) {
   bot.chat(str)
   await sleep(250 * (str.length));
 }
-// bot.on('chat', async (username, message) => {
-//   if (username === bot.username) return;
-//   if (message === 'Dig downwards') {
-//     const blockPos = bot.entity.position.offset(0, -1, 0)
-//     const block = bot.blockAt(blockPos)
-//     await bot.tool.equipForBlock(block, () => { bot.equip(mcdata.items(), 'hand'); })
-//     await bot.dig(block)
-//   }
-// })
+
+//working on action
+
+bot.on('chat', async (username, message) => {
+  if (username === bot.username) return;
+  if (message === 'Dig downwards') {
+    const pos = bot.entity.position.clone
+    const blockPos = bot.entity.position.offset(0, -1, 0)
+    const block = bot.blockAt(blockPos)
+    // await bot.tool.equipForBlock(block, () => { bot.equip(mcdata.items(), 'hand'); })
+    if (block!=null) if (block.hardness>0){
+    await bot.dig(block)
+    const int_time = 0;
+    while (bot.entity.position.clone == pos) { //这里会出现进程堵塞，需要想方法退出
+        const posX = bot.entity.position.x;
+        const posZ = bot.entity.position.z;
+        const deltaPosX = posX-Math.floor(posX);
+        const deltaPosZ = posZ-Math.floor(posZ);
+
+        console.log("posX:"+posX+"\nposZ:"+posZ+"\ndeltaPosX"+deltaPosX+"\ndeltaPosZ"+deltaPosZ+"\NfloorDeltaPosX"+Math.floor(deltaPosX)+"\nfloorDeltaPosZ"+Math.floor(deltaPosZ))
+        const blockPos2 = bot.entity.position.offset(Math.floor(deltaPosX),-1,Math.floor(deltaPosZ));
+        await bot.dig(block)
+    }
+  }
+}})
+
+bot.on('chat', async (username, message) => {
+  if (username === bot.username) return;
+  if (message === 'D2') {
+    const posX = ~~bot.entity.position.x.toFixed(4);
+    const posZ = ~~bot.entity.position.z.toFixed(4);
+    console.log("posX: "+posX+"\nposZ: "+posZ)
+    const deltaPosX = posX-Math.floor(posX);
+    const deltaPosZ = posZ-Math.floor(posZ);
+    const blockPos1 = bot.entity.position.offset(0,-1,0);
+    const block1 = bot.blockAt(blockPos1)
+    if (block1!=null) await bot.dig(block1)
+
+    let x = 0;
+    let z = 0;
+    if (deltaPosX<0.3){
+      x = x - 1;
+    } else if (deltaPosX>0.7){
+      x = x + 1;
+    }
+    if (x!=0) {
+      const blockPos2 = bot.entity.position.offset(x,-1,0);
+      const block2 = bot.blockAt(blockPos2)
+      if (block2!=null) await bot.dig(block2)
+    }
+    if (deltaPosZ<0.3){
+      z = z - 1;
+    } else if (deltaPosZ>0.7){
+      z = z + 1;
+    }
+    if (z!=0) {
+      const blockPos2 = bot.entity.position.offset(0,-1,z);
+      const block2 = bot.blockAt(blockPos2)
+      if (block2!=null) await bot.dig(block2)
+      if (x!=0) {
+        const blockPos3 = bot.entity.position.offset(x,-1,z);
+        const block3 = bot.blockAt(blockPos3)
+        if (block3!=null) await bot.dig(block3)
+      } 
+    }
+
+    console.log("floorPosX: "+Math.floor(posX)+"\nfloorPosZ: "+Math.floor(posZ)); 
+    console.log("posX: "+posX+"\nposZ: "+posZ+"\ndeltaPosX: "+deltaPosX+"\ndeltaPosZ: "+deltaPosZ+"\nfloorDeltaPosX: "+Math.floor(deltaPosX)+"\nfloorDeltaPosZ: "+Math.floor(deltaPosZ))
+    const blockPos = bot.entity.position.offset(Math.floor(deltaPosX),-1,Math.floor(deltaPosZ));    //应循环最大次数为该世界限高次数
+    const block = bot.blockAt(blockPos)
+    if (block!=null) await bot.dig(block)
+    }
+  })
+
+  bot.on('chat', async (username, message) => {
+    if (username === bot.username) return;
+    if (message === 'D3') {
+    // 获取玩家当前位置
+    const pos = bot.entity.position;
+    
+    // 计算玩家所在的x和z方块坐标
+    let x = Math.floor(pos.x);
+    let z = Math.floor(pos.z);
+    
+    // 根据小数部分调整x坐标判断
+    const xFrac = pos.x - x;
+    if (xFrac < 0.3) {
+        x -= 1;
+    } else if (xFrac >= 0.7) {
+        x += 1;
+    }
+    // 0.3-0.7之间保持x不变
+    
+    // 同样处理z坐标
+    const zFrac = pos.z - z;
+    if (zFrac < 0.3) {
+        z -= 1;
+    } else if (zFrac >= 0.7) {
+        z += 1;
+    }
+    
+    // 玩家下方的方块（y坐标减1）
+    const blockPos = pos.offset(0, -1, 0);
+    const block = bot.blockAt(blockPos);
+    
+    // 检查玩家是否站在目标方块的正上方
+    const targetX = Math.floor(blockPos.x);
+    const targetZ = Math.floor(blockPos.z);
+    
+    if (targetX === x && targetZ === z) {
+        // 如果玩家确实站在这个方块正上方，则挖掘
+            if (block!=null) await bot.dig(block);
+            // 挖掘成功
+        } 
+    } //采用列表实现
+    //直接走到目标位置上方再进行挖掘
+})
+
+  //-42.3 ~ -42.7
+
+  bot.on('chat', async (username, message) => {
+    if (username === bot.username) return;
+    if (message === 'D4') {
+    let arr = []
+    // 获取玩家当前位置
+    const pos = bot.entity.position;
+    
+    // 计算玩家所在的x和z方块坐标
+    let x = Math.floor(pos.x);
+    let z = Math.floor(pos.z);
+    let deltaX = 0
+    let deltaY = 0
+
+    arr.push(getRBlock(0,-1,0))
+    // await removeBlock(getRBlock(0,-1,0))
+    // 根据小数部分调整x坐标判断
+    const xFrac = pos.x - x;
+    if (xFrac < 0.3) deltaX = -1 
+    else if (xFrac >= 0.7) deltaX = 1
+    arr.push(getRBlock(deltaX,-1,0))
+    // await removeBlock(getRBlock(deltaX,-1,0))
+    // 0.3-0.7之间保持x不变
+    
+    // 同样处理z坐标
+    const zFrac = pos.z - z;
+    if (zFrac < 0.3) deltaY = -1
+    else if (zFrac >= 0.7) deltaY = 1
+    arr.push(getRBlock(0,-1,deltaY))
+    // await removeBlock(getRBlock(0,-1,deltaY))
+
+    if ((deltaX*deltaY)!==0) 
+      {
+        arr.push(getRBlock(deltaX,-1,deltaY))
+        // await removeBlock(getRBlock(deltaX,-1,deltaY))
+      }
+
+    for (const block of arr) {
+      await removeBlock(block);
+      //可实现复杂判断，如判断方块种类，是否挖掘，岩浆判断等等。
+    }
+     //采用列表实现
+    //直接走到目标位置上方再进行挖掘
+}})
+//92.3~92.7 -> 92
+
+function getRBlock(x,y,z){ return bot.blockAt(bot.entity.position.offset(x, y, z));}
+async function removeBlock(block){ 
+  if(block!==null&&block.hardness>0) {
+    try {await bot.dig(block)}
+    catch (e){console.log(e)}
+    return true;
+    // await sleep(250);
+  } else {
+    return false;
+  }
+}

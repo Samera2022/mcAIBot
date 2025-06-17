@@ -3,3 +3,7 @@ node_modules/
 test/
 note.txt
 米塔相关/
+deprecated/
+deprecated2/
+behaviors/behaviors.js
+behaviors/behaviorCleverFollowPlayer.js

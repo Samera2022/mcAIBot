@@ -105,28 +105,25 @@ bot.once('spawn', () => {
     console.log('Handler Work');
     switch (message) {
       case str_R_FOLLOW:
-        // if (!validateHorizon(entity_target)) return;
         transitions[2].trigger();
         transitions[5].trigger();
-        bool_follow = true;
+        stateManager.setCurrentWork('FOLLOW');
+        stateManager.setWorkStatus(true);
         break;
       case str_R_FOLLOW_ENDED:
         transitions[1].trigger();
-        bool_follow = false;
+        stateManager.setWorkStatus(false);
         break;
-
-      //接下来的case都涉及工作状态的转变  
       case str_R_PVP:
-        // if (!validateHorizon(entity_target)) return;
         bot.chat('Let\'s see who is the boss of the Gym♂!')
-        infos.workType = str_OW_PVP
-        bool_onWork = true;
+        stateManager.setCurrentWork(str_OW_PVP);
+        stateManager.setWorkStatus(true);
         break;
       case str_R_GUARD:
         if (!validateHorizon(entity_target)) return;
         bot.chat('I will guard that location.')
-        infos.workType = str_OW_GUARDING
-        bool_onWork = true;
+        stateManager.setCurrentWork(str_OW_GUARDING);
+        stateManager.setWorkStatus(true);
         break;
     }
     //转为工作状态onWork，同时传递参数
@@ -160,9 +157,8 @@ bot.once('spawn', () => {
         break;
     }
     if (!bool_dead){
-    infos.workType = undefined;
-    bool_onWork = false;//工作已停止
-    transitions[5].trigger();//状态由工作转换为原地看着
+    stateManager.setWorkStatus(false);
+    transitions[5].trigger();
   }
 }
   bot.on('chat', (username, message) => {
@@ -243,4 +239,4 @@ bot.on('entityDead', (entity) => {
 //     await bot.tool.equipForBlock(block, () => { bot.equip(mcdata.items(), 'hand'); })
 //     await bot.dig(block)
 //   }
-// })
+// })```
