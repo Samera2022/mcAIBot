@@ -28,8 +28,6 @@ import { str_R_FOLLOW, str_R_FOLLOW_ENDED, str_R_PVP, str_R_GUARD, str_R_COMPETE
 import { stopGuarding, evt_stoppedAttacking, evt_physicsTick } from './guard.js';
 
 import BehaviorOnWork from './behaviors/behaviorOnWork.js';
-// import BehaviorCleverFollowPlayer from './behaviors/behaviorCleverFollowPlayer.js';
-// import BehaviorTest from './behaviors/behavior.js';
 
 console.log('running...');
 
@@ -44,6 +42,8 @@ export const bot = mineflayer.createBot({
 
 bot.loadPlugin(pvp)
 bot.loadPlugin(pathfinder)
+const toolPlugin = require('mineflayer-tool').plugin
+bot.loadPlugin(toolPlugin)
 
 bot.once('spawn', () => { mineflayerViewer(bot, { port: 3007, firstPerson: true }) /* port 是本地网页运行的端口 ，如果 firstPerson: false，那么将会显示鸟瞰图。*/ })
 
@@ -501,7 +501,7 @@ bot.on('chat', async (username, message) => {
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
-    if (message === 'D4') {
+    if (message === 'Dig Downwards') {
     let arr = []
     // 获取玩家当前位置
     const pos = bot.entity.position;
@@ -536,7 +536,16 @@ bot.on('chat', async (username, message) => {
       }
 
     for (const block of arr) {
+        // 判断物品栏中是否有指定工具
+    const hasTool = bot.inventory.items().some(item =>
+      item.name.includes('pickaxe') ||
+      (item.name.includes('axe') && !item.name.includes('pickaxe')) ||
+      item.name.includes('shovel') ||
+      item.name.includes('shears')
+    );
+      
       await removeBlock(block);
+      
       //可实现复杂判断，如判断方块种类，是否挖掘，岩浆判断等等。
     }
      //采用列表实现
@@ -545,13 +554,245 @@ bot.on('chat', async (username, message) => {
 //92.3~92.7 -> 92
 
 function getRBlock(x,y,z){ return bot.blockAt(bot.entity.position.offset(x, y, z));}
+
 async function removeBlock(block){ 
-  if(block!==null&&block.hardness>0) {
-    try {await bot.dig(block)}
-    catch (e){console.log(e)}
+  if(block!==null && block.hardness > 0) {
+    try {
+      console.log(`[挖掘] block: ${block.name} @ ${block.position}`);
+      await bot.dig(block)
+    }
+    catch (e){
+      console.log('[挖掘异常]', e)
+    }
     return true;
-    // await sleep(250);
   } else {
+    console.log('[跳过] block 不可挖掘或不存在:', block && block.name, block && block.position)
     return false;
+  }
+}
+
+bot.on('chat', async (username, message) => {
+  if (username === bot.username) return;
+  if (message === 'D5') {
+    const mcData = require('minecraft-data')(bot.version);
+    const { Vec3 } = require('vec3');
+    let arr = [];
+    const pos = bot.entity.position;
+    let x = Math.floor(pos.x);
+    let z = Math.floor(pos.z);
+    let deltaX = 0, deltaY = 0;
+
+    arr.push(getRBlock(0, -1, 0));
+    const xFrac = pos.x - x;
+    if (xFrac < 0.3) deltaX = -1;
+    else if (xFrac >= 0.7) deltaX = 1;
+    arr.push(getRBlock(deltaX, -1, 0));
+    const zFrac = pos.z - z;
+    if (zFrac < 0.3) deltaY = -1;
+    else if (zFrac >= 0.7) deltaY = 1;
+    arr.push(getRBlock(0, -1, deltaY));
+    if ((deltaX * deltaY) !== 0) {
+      arr.push(getRBlock(deltaX, -1, deltaY));
+    }
+
+    let dugBlocks = [];
+      let bool_move = false;
+    for (const block of arr) {
+  if (!block) {
+    console.log('[跳过] block 不存在')
+    continue;
+  }
+
+      // 优先处理流体方块
+    arr = arr.filter(b => b).sort((a, b) => {
+      const aFluid = isFluid(a) ? 1 : 0;
+      const bFluid = isFluid(b) ? 1 : 0;
+      return bFluid - aFluid; // 流体在前
+    });
+  // 判断是否为流体
+  if (isFluid(block)) {
+    await fillNearbyFluids(block.position, 2);
+    const filledBlock = bot.blockAt(block.position);
+    if (filledBlock) {
+      try {
+        await bot.tool.equipForBlock(filledBlock);
+      } catch (e) {
+        console.log('[equipForBlock异常] 填充流体:', e)
+      }
+      await removeBlock(filledBlock);
+      dugBlocks.push(filledBlock);
+      bool_move = true;
+    }
+    continue;
+  }
+
+  // 自动切换合适工具
+  try {
+    await bot.tool.equipForBlock(block);
+  } catch (e) {
+    console.log('[equipForBlock异常]', e)
+    continue;
+  }
+
+  // 挖掘方块
+  const success = await removeBlock(block);
+  if (success) dugBlocks.push(block);
+
+}
+
+    // // 挖掘结束后，移动到已挖掘的 block 之一
+    if (dugBlocks.length > 0 && bool_move) {
+      const target = dugBlocks[0];
+      await bot.pathfinder.goto(new goals.GoalBlock(target.position.x, target.position.y, target.position.z));
+    }
+  }
+});
+
+// 判断是否为流体方块
+function isFluid(block) {
+  if (!block) return false;
+  return block.name.includes('water') || block.name.includes('lava');
+}
+
+// 填充流体及其2格内的流体
+async function fillNearbyFluids(pos, radius) {
+  const mcData = require('minecraft-data')(bot.version);
+  const { Vec3 } = require('vec3');
+  const placeableBlock = bot.inventory.items().find(item => {
+    const b = mcData.items[item.type];
+    return b && b.name !== 'water_bucket' && b.name !== 'lava_bucket' && b.stackSize > 1;
+  });
+  if (!placeableBlock) return;
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        const p = pos.offset(dx, dy, dz);
+        const b = bot.blockAt(p);
+        if (b && isFluid(b)) {
+          await bot.equip(placeableBlock, 'hand');
+          try {
+            await bot.placeBlock(b, new Vec3(0, 1, 0));
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
+}
+
+bot.on('chat', async (username, message) => {
+  if (username === bot.username) return;
+  if (message === 'D6') {
+    const mcData = require('minecraft-data')(bot.version);
+    const { Vec3 } = require('vec3');
+    let arr = [];
+    const pos = bot.entity.position;
+    let x = Math.floor(pos.x);
+    let z = Math.floor(pos.z);
+    let deltaX = 0, deltaY = 0;
+
+    arr.push(getRBlock(0, -1, 0));
+    const xFrac = pos.x - x;
+    if (xFrac < 0.3) deltaX = -1;
+    else if (xFrac >= 0.7) deltaX = 1;
+    arr.push(getRBlock(deltaX, -1, 0));
+    const zFrac = pos.z - z;
+    if (zFrac < 0.3) deltaY = -1;
+    else if (zFrac >= 0.7) deltaY = 1;
+    arr.push(getRBlock(0, -1, deltaY));
+    if ((deltaX * deltaY) !== 0) {
+      arr.push(getRBlock(deltaX, -1, deltaY));
+    }
+
+    for (const block of arr) {
+      if (!block) continue;
+
+      // 检查周围6个方向是否有流体
+      const directions = [
+        new Vec3(1, 0, 0), new Vec3(-1, 0, 0),
+        new Vec3(0, 1, 0), new Vec3(0, -1, 0),
+        new Vec3(0, 0, 1), new Vec3(0, 0, -1)
+      ];
+      let filledAny = false;
+      for (const dir of directions) {
+        const neighbor = bot.blockAt(block.position.offset(dir.x, dir.y, dir.z));
+        if (neighbor && isFluid(neighbor)) {
+          // 检查流体周围是否有可依附的固体方块
+          const attachDirs = [
+            new Vec3(1, 0, 0), new Vec3(-1, 0, 0),
+            new Vec3(0, 1, 0), new Vec3(0, -1, 0),
+            new Vec3(0, 0, 1), new Vec3(0, 0, -1)
+          ];
+          let canPlace = false;
+          let attachFace = null;
+          for (const attachDir of attachDirs) {
+            const attachBlock = bot.blockAt(neighbor.position.offset(attachDir.x, attachDir.y, attachDir.z));
+            if (attachBlock && attachBlock.boundingBox === 'block' && !isFluid(attachBlock)) {
+              canPlace = true;
+              attachFace = attachDir;
+              break;
+            }
+          }
+          if (canPlace) {
+            await fillFluidBlock(neighbor, attachFace);
+            filledAny = true;
+          } else {
+            const below = bot.blockAt(neighbor.position.offset(0, -1, 0));
+            if (below && below.boundingBox === 'empty') {
+              await fillFluidBlock(below, new Vec3(0, -1, 0));
+              await fillFluidBlock(neighbor, new Vec3(0, -1, 0));
+              filledAny = true;
+            }
+          }
+        }
+      }
+      // 修正：填充流体后等待一会再继续挖掘，而不是直接continue
+      if (filledAny) {
+        await sleep(500); // 等待流体消失
+      }
+
+      // 原有流体检测和挖掘逻辑
+      if (isFluid(block)) {
+        await fillNearbyFluids(block.position, 2);
+        const filledBlock = bot.blockAt(block.position);
+        if (filledBlock) {
+          try {
+            await bot.tool.equipForBlock(filledBlock);
+          } catch (e) {
+            console.log('[equipForBlock异常] 填充流体:', e)
+          }
+          await removeBlock(filledBlock);
+        }
+        continue;
+      }
+
+      // 自动切换合适工具
+      try {
+        await bot.tool.equipForBlock(block);
+      } catch (e) {
+        console.log('[equipForBlock异常]', e)
+        continue;
+      }
+
+      // 挖掘方块
+      await removeBlock(block);
+    }
+  }
+});
+
+// 新增：填充单个流体方块的函数
+async function fillFluidBlock(fluidBlock, attachFace) {
+  const mcData = require('minecraft-data')(bot.version);
+  const { Vec3 } = require('vec3');
+  const placeableBlock = bot.inventory.items().find(item => {
+    const b = mcData.items[item.type];
+    return b && b.name !== 'water_bucket' && b.name !== 'lava_bucket' && b.stackSize > 1;
+  });
+  if (!placeableBlock) return;
+  await bot.equip(placeableBlock, 'hand');
+  try {
+    await bot.placeBlock(fluidBlock, attachFace);
+  } catch (e) {
+    console.log('[填充流体异常]', e)
   }
 }

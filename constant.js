@@ -8,6 +8,7 @@ export const str_OW_GUARDING = 'guarding';
 export const str_OW_PVP = 'pvp';
 export const str_OW_COMPETE = 'compete';
 export const str_OW_STOP_ALL_ACTIVITIES = 'stop_all_activities';
+export const str_OW_DIGGING_DOWNWARDS = 'digging_downwards';
 
 //section requests
 export const str_R_FOLLOW = 'follow me';
@@ -15,3 +16,4 @@ export const str_R_PVP = 'fight me';
 export const str_R_FOLLOW_ENDED = 'stop following me';
 export const str_R_GUARD = 'guard';
 export const str_R_COMPETE = 'compete';
+export const str_R_DIGGING_DOWNWARDS = 'd2';
