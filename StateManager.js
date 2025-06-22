@@ -1,9 +1,9 @@
+import pkg from 'mineflayer-pathfinder'
+const { Movements, goals } = pkg
+import { bot, lang } from './botMain.js'
+
 export class StateManager {
-  /**
-   * @param {import('mineflayer').Bot} bot
-   */
-  constructor(bot) {
-    this.bot = bot
+  constructor() {
     this.isFollowing = false
     this.isWorking = false
     this.followTarget = null
@@ -16,21 +16,22 @@ export class StateManager {
    */
   startFollow(username) {
     const target = username
-      ? this.bot.players[username]?.entity
+      ? bot.players[username]?.entity
       : this._getFirstPlayerEntity()
     if (!target) {
-      this.bot.chat('未找到要跟随的玩家')
+      const msg = lang.t('warn.follow.not_found')
+      if (msg) bot.chat(msg)
       return
     }
     this.isFollowing = true
     this.followTarget = target
-    if (this.bot.pathfinder) {
-      const { Movements, goals } = require('mineflayer-pathfinder')
-      const defaultMove = new Movements(this.bot)
-      this.bot.pathfinder.setMovements(defaultMove)
-      this.bot.pathfinder.setGoal(new goals.GoalFollow(target, 1), true)
+    if (bot.pathfinder) {
+      const defaultMove = new Movements(bot)
+      bot.pathfinder.setMovements(defaultMove)
+      bot.pathfinder.setGoal(new goals.GoalFollow(target, 1), true)
     }
-    this.bot.chat(`开始跟随${username ? username : target.username}`)
+    const msg = lang.t('info.follow.start', { username: username ? username : target.username })
+    if (msg) bot.chat(msg)
   }
 
   /**
@@ -39,10 +40,11 @@ export class StateManager {
   stopFollow() {
     this.isFollowing = false
     this.followTarget = null
-    if (this.bot.pathfinder) {
-      this.bot.pathfinder.setGoal(null)
+    if (bot.pathfinder) {
+      bot.pathfinder.setGoal(null)
     }
-    this.bot.chat('已停止跟随')
+    const msg = lang.t('info.follow.stop')
+    if (msg) bot.chat(msg)
   }
 
   /**
@@ -53,8 +55,8 @@ export class StateManager {
   startWork(type, options = {}) {
     this.isWorking = true
     this.workType = type
-    // 可根据 type 调用不同的 manager
-    this.bot.chat(`开始${type}工作`)
+    const msg = lang.t('info.work.start', { type })
+    if (msg) bot.chat(msg)
   }
 
   /**
@@ -65,10 +67,11 @@ export class StateManager {
     this.isWorking = false
     this.followTarget = null
     this.workType = null
-    if (this.bot.pathfinder) {
-      this.bot.pathfinder.setGoal(null)
+    if (bot.pathfinder) {
+      bot.pathfinder.setGoal(null)
     }
-    this.bot.chat('所有活动已停止')
+    const msg = lang.t('info.all.stop')
+    if (msg) bot.chat(msg)
   }
 
   /**
@@ -76,9 +79,9 @@ export class StateManager {
    * @returns {Entity|null}
    */
   _getFirstPlayerEntity() {
-    for (const name in this.bot.players) {
-      if (name !== this.bot.username && this.bot.players[name].entity) {
-        return this.bot.players[name].entity
+    for (const name in bot.players) {
+      if (name !== bot.username && bot.players[name].entity) {
+        return bot.players[name].entity
       }
     }
     return null

@@ -1,13 +1,10 @@
 /**
  * PVPManager 负责管理 bot 的PVP行为，包括开始和停止PVP。
- * 该实现忠实于 t.js 的原始需求和行为。
  */
+import { bot, lang } from './botMain.js'
 export class PVPManager {
-  /**
-   * @param {import('mineflayer').Bot} bot
-   */
-  constructor(bot) {
-    this.bot = bot
+
+  constructor() {
     this.isPvp = false
     this.target = null
   }
@@ -18,19 +15,19 @@ export class PVPManager {
    */
   startPvp(username) {
     const target = username
-      ? this.bot.players[username]?.entity
+      ? bot.players[username]?.entity
       : this._getFirstPlayerEntity()
     if (!target) {
-      this.bot.chat('未找到PVP目标')
+      bot.chat('未找到PVP目标')
       return
     }
     this.isPvp = true
     this.target = target
-    if (this.bot.pvp) {
-      this.bot.pvp.attack(target)
-      this.bot.chat(`开始与${username ? username : target.username} PVP`)
+    if (bot.pvp) {
+      bot.pvp.attack(target)
+      bot.chat(`开始与${username ? username : target.username} PVP`)
     } else {
-      this.bot.chat('PVP插件未加载')
+      bot.chat('PVP插件未加载')
     }
   }
 
@@ -40,13 +37,13 @@ export class PVPManager {
   stopPvp() {
     this.isPvp = false
     this.target = null
-    if (this.bot.pvp) {
-      this.bot.pvp.stop()
+    if (bot.pvp) {
+      bot.pvp.stop()
     }
-    if (this.bot.pathfinder) {
-      this.bot.pathfinder.setGoal(null)
+    if (bot.pathfinder) {
+      bot.pathfinder.setGoal(null)
     }
-    this.bot.chat('已停止PVP')
+    bot.chat('已停止PVP')
   }
 
   /**
@@ -54,9 +51,9 @@ export class PVPManager {
    * @returns {Entity|null}
    */
   _getFirstPlayerEntity() {
-    for (const name in this.bot.players) {
-      if (name !== this.bot.username && this.bot.players[name].entity) {
-        return this.bot.players[name].entity
+    for (const name in bot.players) {
+      if (name !== bot.username && bot.players[name].entity) {
+        return bot.players[name].entity
       }
     }
     return null

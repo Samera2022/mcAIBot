@@ -1,0 +1,39 @@
+{
+  "author" : "Samera2022",
+  "localization_contributor" : "Samera2022",
+
+  "loc1" : "StateManager.js",
+  "warn.follow.not_found": "未找到要跟随的玩家",
+  "info.follow.start": "开始跟随{username}",
+  "info.follow.stop": "已停止跟随",
+  "info.work.start": "开始{type}工作",
+  "info.all.stop": "所有活动已停止",
+
+  "loc2" : "BlockManager.js",
+  "warn.block.not_enough" : "可放置方块不足！",
+  "error.block.digging" : "[挖掘异常] {error}",
+  "warn.block.ct.not_found" : "未找到树木！",
+  "info.block.ct.finished" : "砍树完成！",
+
+  "loc3" : "ChatCommandHandler.js",
+  "cmd.chat.D10" : "向下掘进",
+  "cmd.chat.ct" : "砍树",
+  "cmd.chat.follow" : "跟随",
+  "cmd.chat.stop_following" : "停止跟随",
+  "cmd.chat.pvp" : "决斗",
+  "cmd.chat.stop" : "终止",
+  "info.chat.stop" : "停止当前工作",
+  "cmd.chat.guard" : "卫戍",
+  "cmd.chat.compete" : "比赛",
+
+  "loc4" : "GuardManager.js",
+  "info.guard.start" : "开始卫戍",
+  "info.guard.stop" : "停止卫戍",
+
+  "loc5" : "CompetitionManager.js",
+  "info.compete.interrupted" : "等等，我话还没说完呢......",
+  "warn.compete.not_found" : "未找到比赛目标",
+  "info.compete.stop" : "结束啦！",
+  "info.compete.another_round" : "怎么样，还想再来一轮吗？",
+  "info.compete.wait" : "等你一会来拉开距离，对决马上开始......"
+}

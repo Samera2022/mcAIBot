@@ -1,73 +1,56 @@
+import { bot, lang } from './botMain.js'
+import { blockManager, stateManager, pvpManager, guardManager, competitionManager } from './botMain.js'
+
 export class ChatCommandHandler {
-  /**
-   * @param {import('mineflayer').Bot} bot
-   * @param {object} modules
-   * @param {import('./BlockManager.js').BlockManager} modules.blockWorker
-   * @param {any} [modules.stateManager]
-   * @param {any} [modules.pvpManager]
-   * @param {any} [modules.guardManager]
-   * @param {any} [modules.competitionManager]
-   */
-  constructor(bot, modules) {
-    this.bot = bot
-    this.blockManager = modules.blockManager
-    this.stateManager = modules.stateManager
-    this.pvpManager = modules.pvpManager
-    this.guardManager = modules.guardManager
-    this.competitionManager = modules.competitionManager
+  constructor() {
 
     // 指令映射表
     this.commandMap = {
-      'D10': async () => await this.blockManager.handleD10(),
-      'D11': async () => await this.blockManager.handleD11(),
-      '跟随': async () => {
-        this.bot.chat('开始跟随')
-        if (this.stateManager && this.stateManager.startFollow) {
-          this.stateManager.startFollow()
+      [lang.t('cmd.chat.D10')]: async () => await blockManager.handleD10(),
+      [lang.t('cmd.chat.ct')]: async () => await blockManager.chopTree(),
+      [lang.t('cmd.chat.follow')]: async () => {
+        if (stateManager && stateManager.startFollow) {
+          stateManager.startFollow()
         }
       },
-      '停止跟随': async () => {
-        this.bot.chat('停止跟随')
-        if (this.stateManager && this.stateManager.stopFollow) {
-          this.stateManager.stopFollow()
+      [lang.t('cmd.chat.stop_following')]: async () => {
+        if (stateManager && stateManager.stopFollow) {
+          stateManager.stopFollow()
         }
       },
-      'pvp': async () => {
-        this.bot.chat('开始PVP')
-        if (this.pvpManager && this.pvpManager.startPvp) {
-          this.pvpManager.startPvp()
+      [lang.t('cmd.chat.pvp')]: async () => {
+        if (pvpManager && pvpManager.startPvp) {
+          pvpManager.startPvp()
         }
       },
-      'stop': async () => {
-        this.bot.chat('停止当前工作')
-        if (this.stateManager && this.stateManager.stopAll) {
-          this.stateManager.stopAll()
+      [lang.t('cmd.chat.stop')]: async () => {
+        bot.chat(lang.t('info.chat.stop'))
+        if (stateManager && stateManager.stopAll) {
+          stateManager.stopAll()
         }
-        if (this.pvpManager && this.pvpManager.stopPvp) {
-          this.pvpManager.stopPvp()
+        if (pvpManager && pvpManager.stopPvp) {
+          pvpManager.stopPvp()
         }
-        if (this.guardManager && this.guardManager.stopGuard) {
-          this.guardManager.stopGuard()
+        if (guardManager && guardManager.stopGuard) {
+          guardManager.stopGuard()
         }
-        if (this.competitionManager && this.competitionManager.stopCompetition) {
-          this.competitionManager.stopCompetition()
-        }
-      },
-      '守卫': async () => {
-        this.bot.chat('开始守卫')
-        if (this.guardManager && this.guardManager.startGuard) {
-          this.guardManager.startGuard()
+        if (competitionManager && competitionManager.stopCompetition) {
+          competitionManager.stopCompetition()
         }
       },
-      '比赛': async () => {
-        this.bot.chat('开始比赛')
-        if (this.competitionManager && this.competitionManager.startCompetition) {
-          this.competitionManager.startCompetition()
+      [lang.t('cmd.chat.guard')]: async () => {
+        if (guardManager && guardManager.startGuard) {
+          guardManager.startGuard()
+        }
+      },
+      [lang.t('cmd.chat.compete')]: async () => {
+        if (competitionManager && competitionManager.startCompetition) {
+          competitionManager.startCompetition()
         }
       }
     }
 
-    this.bot.on('chat', this.handleChat.bind(this))
+    bot.on('chat', this.handleChat.bind(this))
   }
 
   /**
@@ -76,7 +59,7 @@ export class ChatCommandHandler {
    * @param {string} message
    */
   async handleChat(username, message) {
-    if (username === this.bot.username) return
+    if (username === bot.username) return
     const handler = this.commandMap[message]
     if (handler) {
       await handler()

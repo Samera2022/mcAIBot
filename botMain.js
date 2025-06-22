@@ -19,6 +19,7 @@ import { PVPManager } from './PVPManager.js'
 import { GuardManager } from './GuardManager.js'
 import { CompetitionManager } from './CompetitionManager.js'
 import { ChatCommandHandler } from './ChatCommandHandler.js'
+import { LanguageManager } from './LanguageManager.js'
 
 console.log('running...')
 
@@ -37,13 +38,13 @@ bot.loadPlugin(armorManager)
 
 // 事件监听
 bot.once('spawn', () => {
-  mineflayerViewer(bot, { port: 3007, firstPerson: true })
   bot.armorManager.equipAll()
 })
 
 // 自动进食
 bot.once('spawn', async () => {
   bot.loadPlugin(autoEat)
+  mineflayerViewer(bot, { port: 3007, firstPerson: true })
   bot.autoEat.enableAuto()
   bot.autoEat.on('eatStart', (opts) => { console.log(`Started eating ${opts.food.name} in ${opts.offhand ? 'offhand' : 'hand'}`) })
   bot.autoEat.on('eatFinish', (opts) => { console.log(`Finished eating ${opts.food.name}`) })
@@ -55,20 +56,15 @@ bot.on('kicked', console.log)
 bot.on('error', console.log)
 
 // 实例化功能模块
-const blockManager = new BlockManager(bot)
-const stateManager = new StateManager(bot)
-const pvpManager = new PVPManager(bot)
-const guardManager = new GuardManager(bot)
-const competitionManager = new CompetitionManager(bot)
+export let blockManager = new BlockManager()
+export let lang = new LanguageManager()//统一调用该位置的lang实例，方便后面刷新后直接全局换
+export let stateManager = new StateManager()
+export let pvpManager = new PVPManager()
+export let guardManager = new GuardManager()
+export let competitionManager = new CompetitionManager()
 
 // 聊天指令处理（D10/D11/跟随/PVP/守卫/比赛/stop等）
-new ChatCommandHandler(bot, {
-  blockManager,
-  stateManager,
-  pvpManager,
-  guardManager,
-  competitionManager
-})
+new ChatCommandHandler()
 
 // 守卫与比赛相关事件绑定
 bot.on('entityDead', (entity) => {

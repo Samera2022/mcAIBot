@@ -1,18 +1,14 @@
 /**
  * GuardManager 负责管理 bot 的守卫行为，包括开始和停止守卫。
- * 该实现忠实于 t.js/guard.js 的原始需求和行为。
  */
+import { bot, lang } from './botMain.js'
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 const { goals } = require('mineflayer-pathfinder')
 const Movements = require('mineflayer-pathfinder').Movements
 
 export class GuardManager {
-  /**
-   * @param {import('mineflayer').Bot} bot
-   */
-  constructor(bot) {
-    this.bot = bot
+  constructor() {
     this.guardPos = null
     this.movingToGuardPos = false
   }
@@ -22,9 +18,9 @@ export class GuardManager {
    * @param {import('vec3').Vec3} [pos] - 守卫的目标位置，默认守卫自己当前位置
    */
   startGuard(pos) {
-    this.guardPos = pos || this.bot.entity.position.clone()
-    if (!this.bot.pvp.target) this.moveToGuardPos()
-    this.bot.chat('已开始守卫')
+    this.guardPos = pos || bot.entity.position.clone()
+    if (!bot.pvp.target) this.moveToGuardPos()
+    bot.chat(lang.t("info.guard.start"))
   }
 
   /**
@@ -33,8 +29,8 @@ export class GuardManager {
   async stopGuard() {
     this.movingToGuardPos = false
     this.guardPos = null
-    if (this.bot.pvp) await this.bot.pvp.stop()
-    this.bot.chat('已停止守卫')
+    if (bot.pvp) await bot.pvp.stop()
+    bot.chat(lang.t("info.guard.stop"))
   }
 
   /**
@@ -43,11 +39,11 @@ export class GuardManager {
    */
   async moveToGuardPos() {
     if (this.movingToGuardPos || !this.guardPos) return
-    const mcData = require('minecraft-data')(this.bot.version)
-    this.bot.pathfinder.setMovements(new Movements(this.bot, mcData))
+    const mcData = require('minecraft-data')(bot.version)
+    bot.pathfinder.setMovements(new Movements(bot, mcData))
     try {
       this.movingToGuardPos = true
-      await this.bot.pathfinder.goto(new goals.GoalNear(this.guardPos.x, this.guardPos.y, this.guardPos.z, 2))
+      await bot.pathfinder.goto(new goals.GoalNear(this.guardPos.x, this.guardPos.y, this.guardPos.z, 2))
     } catch (err) {
       // 路径查找失败或被打断
     } finally {
@@ -69,19 +65,19 @@ export class GuardManager {
     if (!this.guardPos) return
 
     let entity = null
-    if (this.bot.entity.position.distanceTo(this.guardPos) < 16) {
+    if (bot.entity.position.distanceTo(this.guardPos) < 16) {
       const filter = e =>
         (e.type === 'hostile' || e.type === 'mob') &&
-        e.position.distanceTo(this.bot.entity.position) < 10 &&
+        e.position.distanceTo(bot.entity.position) < 10 &&
         e.displayName !== 'Armor Stand'
-      entity = this.bot.nearestEntity(filter)
+      entity = bot.nearestEntity(filter)
     }
 
     if (entity && !this.movingToGuardPos) {
-      this.bot.pvp.attack(entity)
+      bot.pvp.attack(entity)
     } else {
-      if (this.bot.entity.position.distanceTo(this.guardPos) < 2) return
-      if (this.bot.pvp) await this.bot.pvp.stop()
+      if (bot.entity.position.distanceTo(this.guardPos) < 2) return
+      if (bot.pvp) await bot.pvp.stop()
       this.moveToGuardPos()
     }
   }

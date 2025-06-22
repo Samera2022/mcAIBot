@@ -1,13 +1,9 @@
+import { bot, lang } from './botMain.js'
 /**
  * CompetitionManager 负责管理 bot 的比赛（切磋）行为，包括开始和停止比赛。
- * 该实现忠实于 t.js 的原始需求和行为。
  */
 export class CompetitionManager {
-  /**
-   * @param {import('mineflayer').Bot} bot
-   */
-  constructor(bot) {
-    this.bot = bot
+  constructor() {
     this.isCompeting = false
     this.playerName = ''
     this.botDeath = 0
@@ -22,14 +18,12 @@ export class CompetitionManager {
    */
   async startCompetition(username) {
     if (this.competitionActive) {
-      this.bot.chat('等等，我话还没说完呢......')
+      bot.chat(lang.t("info.compete.interrupted"))
       return
     }
-    const target = username
-      ? this.bot.players[username]?.entity
-      : this._getFirstPlayerEntity()
+    const target = username ? bot.players[username]?.entity : this._getFirstPlayerEntity()
     if (!target) {
-      this.bot.chat('未找到比赛目标')
+      bot.chat(lang.t('warn.compete.not_found'))
       return
     }
     this.isCompeting = true
@@ -49,9 +43,9 @@ export class CompetitionManager {
     this.isCompeting = false
     this.competitionActive = false
     this.playerName = ''
-    if (this.bot.pvp) this.bot.pvp.stop()
-    if (this.bot.pathfinder) this.bot.pathfinder.setGoal(null)
-    this.bot.chat('比赛已停止')
+    if (bot.pvp) bot.pvp.stop()
+    if (bot.pathfinder) bot.pathfinder.setGoal(null)
+    bot.chat(lang.t('info.compete.stop'))
   }
 
   /**
@@ -67,22 +61,22 @@ export class CompetitionManager {
       str_object += this.botDeath + 'v'
     }
     await this._handleCompeteDialog(str_object)
-    if (this.bot.pvp) this.bot.pvp.stop()
-    if (this.bot.pathfinder) this.bot.pathfinder.setGoal(null)
-    if (this.playerDeath === 3 || this.botDeath === 3) {
+    if (bot.pvp) bot.pvp.stop()
+    if (bot.pathfinder) bot.pathfinder.setGoal(null)
+    if (this.playerDeath === 3 || botDeath === 3) {
       this.isCompeting = false
       this.competitionActive = false
       this.botDeath = 0
       this.playerDeath = 0
       this.playerName = ''
       this.boolWin = false
-      this.bot.chat('怎么样，还想再来一轮吗？')
+      bot.chat(lang.t('info.compete.another_round'))
       return
     }
-    await this._speaker('等你一会来拉开距离，对决马上开始......')
-    const entity_target = this.bot.players[this.playerName]?.entity
+    await this._speaker(lang.t('info.compete.wait'))
+    const entity_target = bot.players[this.playerName]?.entity
     if (entity_target) {
-      if (this.bot.pvp) this.bot.pvp.attack(entity_target)
+      if (bot.pvp) bot.pvp.attack(entity_target)
     }
   }
 
@@ -142,7 +136,7 @@ export class CompetitionManager {
    * @private
    */
   async _speaker(str) {
-    this.bot.chat(str)
+    bot.chat(str)
     await new Promise(resolve => setTimeout(resolve, 250 * str.length))
   }
 
@@ -153,7 +147,7 @@ export class CompetitionManager {
   async onEntityDead(entity) {
     if (!this.competitionActive) return
     if (entity.type === 'player') {
-      if (entity.username === this.bot.username) {
+      if (entity.username === bot.username) {
         this.boolWin = false
         this.botDeath += 1
         await this._competeLoop()
@@ -170,9 +164,9 @@ export class CompetitionManager {
    * @returns {Entity|null}
    */
   _getFirstPlayerEntity() {
-    for (const name in this.bot.players) {
-      if (name !== this.bot.username && this.bot.players[name].entity) {
-        return this.bot.players[name].entity
+    for (const name in bot.players) {
+      if (name !== bot.username && bot.players[name].entity) {
+        return bot.players[name].entity
       }
     }
     return null
